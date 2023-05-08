@@ -19,6 +19,7 @@ type Engine struct {
 	currentMemtable     *skiplist.SkipList
 	readOnlyMemtable    *skiplist.SkipList
 	currentMemtableLock sync.RWMutex
+	compactionLock      sync.Mutex
 }
 
 type MemtableEntry struct {
@@ -38,11 +39,26 @@ func InitializeEngine() *Engine {
 }
 
 func (e *Engine) GetValue(key string) (string, error) {
+	e.compactionLock.Lock()
 	e.currentMemtableLock.RLock()
+
+	defer e.currentMemtableLock.RUnlock()
+	defer e.compactionLock.Unlock()
 
 	val, ok := e.currentMemtable.GetValue(key)
 	if !ok {
-		return "", errors.New("Key does not exist!")
+		val, ok = e.readOnlyMemtable.GetValue(key)
+		if !ok {
+			return "", errors.New("Key does not exist!")
+		}
+
+		entry := val.(MemtableEntry)
+
+		if entry.tombstone {
+			return "", errors.New("Key does not exist!")
+		}
+
+		return entry.value, nil
 	}
 
 	entry := val.(MemtableEntry)
@@ -51,33 +67,48 @@ func (e *Engine) GetValue(key string) (string, error) {
 		return "", errors.New("Key does not exist!")
 	}
 
-	e.currentMemtableLock.RUnlock()
-
 	return entry.value, nil
 }
 
 func (e *Engine) PutValue(key string, value string) error {
+	e.compactionLock.Lock()
 	e.currentMemtableLock.Lock()
 
 	entry := MemtableEntry{value, false}
 
 	e.currentMemtable.Set(key, entry)
 
+	e.compactionLock.Unlock()
 	e.currentMemtableLock.Unlock()
+
+	if e.currentMemtable.Len() == 3 {
+		e.triggerBackgroundCompaction()
+	}
 
 	return nil
 }
 
 func (e *Engine) DeleteValue(key string) error {
+	e.compactionLock.Lock()
 	e.currentMemtableLock.Lock()
 
 	deletedEntry := MemtableEntry{"", true}
 
 	e.currentMemtable.Set(key, deletedEntry)
 
+	e.compactionLock.Unlock()
 	e.currentMemtableLock.Unlock()
 
 	return nil
+}
+
+func (e *Engine) triggerBackgroundCompaction() {
+	e.compactionLock.Lock()
+
+	e.readOnlyMemtable = e.currentMemtable
+	e.currentMemtable = skiplist.New(skiplist.StringAsc)
+
+	e.compactionLock.Unlock()
 }
 
 var engine *Engine
