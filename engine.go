@@ -12,7 +12,7 @@ type Engine struct {
 	wal      *WriteAheadLog
 }
 
-func InitializeEngine() *Engine {
+func InitializeEngine() {
 	m := Memtable{
 		currentMemtable:  skiplist.New(skiplist.StringAsc),
 		readOnlyMemtable: skiplist.New(skiplist.StringAsc),
@@ -20,7 +20,7 @@ func InitializeEngine() *Engine {
 
 	w := WriteAheadLog{}
 
-	return &Engine{
+	engine = &Engine{
 		memtable: &m,
 		wal:      &w,
 	}
@@ -42,9 +42,9 @@ func (e *Engine) PutValue(key string, value string) error {
 	e.memtable.Put(key, value, timestamp)
 	e.wal.Append(key, value, timestamp, false)
 
-	if e.memtable.MemtableSize() == 3 {
-		go e.memtable.TriggerBackgroundFlush()
-	}
+	//if e.memtable.MemtableSize() == 3 {
+	//	go e.memtable.TriggerBackgroundFlush()
+	//}
 
 	return nil
 }

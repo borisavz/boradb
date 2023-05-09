@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"github.com/huandu/skiplist"
 	"os"
 	"sync"
 )
@@ -44,13 +45,23 @@ func Recover() {
 		return
 	}
 
+	memtable := skiplist.New(skiplist.StringAsc)
+
 	for {
 		walEntry := ReadWALRow(walCurrent)
 
-		if walEntry == nil {
+		if walEntry != nil {
+			m := MemtableEntry{
+				value:     walEntry.value,
+				tombstone: walEntry.tombstone,
+				timestamp: walEntry.timestamp,
+			}
+
+			memtable.Set(walEntry.key, m)
+		} else {
 			break
 		}
-
-		println(walEntry.String())
 	}
+
+	FlushToFile(memtable)
 }
