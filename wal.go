@@ -37,3 +37,20 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 
 	WriteWALRow(walFile, &walEntry)
 }
+
+func Recover() {
+	walCurrent, err := os.Open("wal-current.bin")
+	if err != nil {
+		return
+	}
+
+	for {
+		walEntry := ReadWALRow(walCurrent)
+
+		if walEntry == nil {
+			break
+		}
+
+		println(walEntry.String())
+	}
+}

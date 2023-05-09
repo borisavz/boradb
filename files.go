@@ -123,6 +123,65 @@ func WriteDataRow(dataFile *os.File, dataEntry *DataEntry) {
 	binary.Write(dataFile, binary.BigEndian, binValue)
 }
 
+func ReadWALRow(dataFile *os.File) *WALEntry {
+	dataKeySizeBin := make([]byte, 4)
+	err := binary.Read(dataFile, binary.BigEndian, dataKeySizeBin)
+	if err != nil {
+		return nil
+	}
+	dataKeySize := binary.BigEndian.Uint32(dataKeySizeBin)
+
+	dataValueSizeBin := make([]byte, 4)
+	err = binary.Read(dataFile, binary.BigEndian, dataValueSizeBin)
+	if err != nil {
+		return nil
+	}
+	dataValueSize := binary.BigEndian.Uint32(dataValueSizeBin)
+
+	dataTimestampBin := make([]byte, 8)
+	err = binary.Read(dataFile, binary.BigEndian, dataTimestampBin)
+	if err != nil {
+		return nil
+	}
+	dataTimestamp := binary.BigEndian.Uint64(dataTimestampBin)
+
+	dataTombstoneBin := make([]byte, 1)
+	err = binary.Read(dataFile, binary.BigEndian, dataTombstoneBin)
+	if err != nil {
+		return nil
+	}
+	dataTombstone := false
+	if dataTombstoneBin[0] == 1 {
+		dataTombstone = true
+	}
+
+	dataKeyBin := make([]byte, dataKeySize)
+	err = binary.Read(dataFile, binary.BigEndian, dataKeyBin)
+	if err != nil {
+		return nil
+	}
+	dataKey := string(dataKeyBin)
+
+	dataValueBin := make([]byte, dataValueSize)
+	dataValue := ""
+	if dataValueSize != 0 {
+		err = binary.Read(dataFile, binary.BigEndian, dataValueBin)
+		if err != nil {
+			return nil
+		}
+		dataValue = string(dataValueBin)
+	}
+
+	return &WALEntry{
+		keySize:   dataKeySize,
+		valueSize: dataValueSize,
+		timestamp: dataTimestamp,
+		tombstone: dataTombstone,
+		key:       dataKey,
+		value:     dataValue,
+	}
+}
+
 func WriteWALRow(walFile *os.File, walEntry *WALEntry) {
 	binKey := []byte(walEntry.key)
 	binValue := []byte(walEntry.value)

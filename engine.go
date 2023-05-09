@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+var engine *Engine
+
 type Engine struct {
 	memtable *Memtable
 	wal      *WriteAheadLog
