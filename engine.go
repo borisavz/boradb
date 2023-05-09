@@ -20,7 +20,13 @@ func InitializeEngine() *Engine {
 }
 
 func (e *Engine) GetValue(key string) (string, error) {
-	return e.memtable.Get(key)
+	val, err := e.memtable.Get(key)
+
+	if err != nil {
+		return FindLSM(key)
+	}
+
+	return val, nil
 }
 
 func (e *Engine) PutValue(key string, value string) error {

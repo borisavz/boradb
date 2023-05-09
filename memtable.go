@@ -130,13 +130,16 @@ func (m *Memtable) flushToFile() {
 		binKey := []byte(strKey)
 		binKeySize := binary.Size(binKey)
 
+		binValue := []byte(val.value)
+		binValueSize := binary.Size(binValue)
+
 		data := DataEntry{
 			keySize:   uint32(binKeySize),
-			valueSize: uint32(binary.Size(val.value)),
+			valueSize: uint32(binValueSize),
 			timestamp: val.timestamp,
 			tombstone: val.tombstone,
 			key:       strKey,
-			value:     []byte(val.value),
+			value:     val.value,
 		}
 
 		index := IndexEntry{
