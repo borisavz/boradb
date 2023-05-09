@@ -8,11 +8,6 @@ type Engine struct {
 	memtable *Memtable
 }
 
-type MemtableEntry struct {
-	value     string
-	tombstone bool
-}
-
 func InitializeEngine() *Engine {
 	m := Memtable{
 		currentMemtable:  skiplist.New(skiplist.StringAsc),

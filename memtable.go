@@ -1,10 +1,20 @@
 package main
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"github.com/huandu/skiplist"
+	"os"
 	"sync"
+	"time"
 )
+
+type MemtableEntry struct {
+	value     string
+	tombstone bool
+	timestamp uint64
+}
 
 type Memtable struct {
 	currentMemtable     *skiplist.SkipList
@@ -49,7 +59,11 @@ func (m *Memtable) Put(key string, value string) {
 	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
-	entry := MemtableEntry{value, false}
+	entry := MemtableEntry{
+		value:     value,
+		tombstone: false,
+		timestamp: uint64(time.Now().UnixNano()),
+	}
 
 	m.currentMemtable.Set(key, entry)
 
@@ -61,7 +75,11 @@ func (m *Memtable) Delete(key string) {
 	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
-	deletedEntry := MemtableEntry{"", true}
+	deletedEntry := MemtableEntry{
+		value:     "",
+		tombstone: true,
+		timestamp: uint64(time.Now().UnixNano()),
+	}
 
 	m.currentMemtable.Set(key, deletedEntry)
 
@@ -79,5 +97,63 @@ func (m *Memtable) TriggerBackgroundFlush() {
 	m.readOnlyMemtable = m.currentMemtable
 	m.currentMemtable = skiplist.New(skiplist.StringAsc)
 
+	m.flushToFile()
+
 	m.flushLock.Unlock()
+}
+
+func (m *Memtable) flushToFile() {
+	timestamp := time.Now().UnixNano()
+
+	indexFilePath := fmt.Sprintf("index-%d.bin", timestamp)
+	dataFilePath := fmt.Sprintf("data-%d.bin", timestamp)
+
+	el := m.readOnlyMemtable.Front()
+
+	indexFile, err := os.Create(indexFilePath)
+	if err != nil {
+		panic(err)
+	}
+
+	dataFile, err := os.Create(dataFilePath)
+	if err != nil {
+		panic(err)
+	}
+
+	dataOffset := 0
+	indexOffset := 0
+
+	for el != nil {
+		strKey := el.Key().(string)
+		val := el.Value.(MemtableEntry)
+
+		binKey := []byte(strKey)
+		binKeySize := binary.Size(binKey)
+
+		data := DataEntry{
+			keySize:   uint32(binKeySize),
+			valueSize: uint32(binary.Size(val.value)),
+			timestamp: val.timestamp,
+			tombstone: val.tombstone,
+			key:       strKey,
+			value:     []byte(val.value),
+		}
+
+		index := IndexEntry{
+			keySize:    uint32(binKeySize),
+			key:        strKey,
+			dataOffset: uint32(dataOffset),
+		}
+
+		WriteDataRow(dataFile, &data)
+		WriteIndexRow(indexFile, &index)
+
+		dataOffset += data.BinarySize()
+		indexOffset += index.BinarySize()
+
+		el = el.Next()
+	}
+
+	indexFile.Close()
+	dataFile.Close()
 }
