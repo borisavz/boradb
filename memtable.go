@@ -93,20 +93,20 @@ func (m *Memtable) MemtableSize() int {
 
 func (m *Memtable) TriggerBackgroundFlush() {
 	m.flushLock.Lock()
+	defer m.flushLock.Unlock()
 
 	m.readOnlyMemtable = m.currentMemtable
 	m.currentMemtable = skiplist.New(skiplist.StringAsc)
 
-	FlushToFile(m.readOnlyMemtable)
-
-	m.flushLock.Unlock()
-}
-
-func FlushToFile(s *skiplist.SkipList) {
 	timestamp := time.Now().UnixNano()
 
+	FlushToFile(timestamp, m.readOnlyMemtable)
+}
+
+func FlushToFile(timestamp int64, s *skiplist.SkipList) {
 	indexFilePath := fmt.Sprintf("index-%d.bin", timestamp)
 	dataFilePath := fmt.Sprintf("data-%d.bin", timestamp)
+	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
 
 	indexFilePathTemp := fmt.Sprintf("%s.temp", indexFilePath)
 	dataFilePathTemp := fmt.Sprintf("%s.temp", dataFilePath)
@@ -165,4 +165,6 @@ func FlushToFile(s *skiplist.SkipList) {
 
 	os.Rename(indexFilePathTemp, indexFilePath)
 	os.Rename(dataFilePathTemp, dataFilePath)
+
+	os.Remove(walFilePath)
 }

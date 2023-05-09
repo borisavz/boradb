@@ -29,5 +29,5 @@ func (w *WALEntry) String() string {
 		return "nil WALEntry"
 	}
 
-	return fmt.Sprintf("WALEntry[keySize: %w, valueSize: %w, timestamp: %w, tombstone: %t, key: %s, value: %s]", w.keySize, w.valueSize, w.timestamp, w.tombstone, w.key, w.value)
+	return fmt.Sprintf("WALEntry[keySize: %d, valueSize: %d, timestamp: %d, tombstone: %t, key: %s, value: %s]", w.keySize, w.valueSize, w.timestamp, w.tombstone, w.key, w.value)
 }

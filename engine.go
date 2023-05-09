@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"github.com/huandu/skiplist"
 	"time"
 )
@@ -42,9 +43,13 @@ func (e *Engine) PutValue(key string, value string) error {
 	e.memtable.Put(key, value, timestamp)
 	e.wal.Append(key, value, timestamp, false)
 
-	//if e.memtable.MemtableSize() == 3 {
-	//	go e.memtable.TriggerBackgroundFlush()
-	//}
+	if e.memtable.MemtableSize() == 3 {
+		//TODO: put proper sync
+		walName := fmt.Sprintf("wal-%d.bin", timestamp)
+
+		e.wal.RenameCurrentWAL(walName)
+		go e.memtable.TriggerBackgroundFlush()
+	}
 
 	return nil
 }

@@ -2,13 +2,24 @@ package main
 
 import (
 	"encoding/binary"
+	"fmt"
 	"github.com/huandu/skiplist"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type WriteAheadLog struct {
 	writeLock sync.Mutex
+}
+
+func (w *WriteAheadLog) RenameCurrentWAL(newName string) {
+	w.writeLock.Lock()
+	defer w.writeLock.Unlock()
+
+	os.Rename("wal-current.bin", newName)
 }
 
 func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombstone bool) {
@@ -40,28 +51,50 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 }
 
 func Recover() {
-	walCurrent, err := os.Open("wal-current.bin")
+	timestamp := time.Now().UnixNano()
+	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
+
+	os.Rename("wal-current.bin", walFilePath)
+
+	dir, err := os.Open("./")
 	if err != nil {
+		//TODO: handle error
 		return
 	}
 
-	memtable := skiplist.New(skiplist.StringAsc)
+	walFiles := GetFilenamesByPredicate(dir, IsWALFile)
 
-	for {
-		walEntry := ReadWALRow(walCurrent)
+	dir.Close()
 
-		if walEntry != nil {
-			m := MemtableEntry{
-				value:     walEntry.value,
-				tombstone: walEntry.tombstone,
-				timestamp: walEntry.timestamp,
-			}
+	for _, f := range walFiles {
+		timestampString := strings.ReplaceAll(strings.ReplaceAll(f, "wal-", ""), ".bin", "")
+		walTimestamp, err := strconv.Atoi(timestampString)
 
-			memtable.Set(walEntry.key, m)
-		} else {
-			break
+		walCurrent, err := os.Open(f)
+		if err != nil {
+			return
 		}
-	}
 
-	FlushToFile(memtable)
+		memtable := skiplist.New(skiplist.StringAsc)
+
+		for {
+			walEntry := ReadWALRow(walCurrent)
+
+			if walEntry != nil {
+				m := MemtableEntry{
+					value:     walEntry.value,
+					tombstone: walEntry.tombstone,
+					timestamp: walEntry.timestamp,
+				}
+
+				memtable.Set(walEntry.key, m)
+			} else {
+				break
+			}
+		}
+
+		walCurrent.Close()
+
+		FlushToFile(int64(walTimestamp), memtable)
+	}
 }

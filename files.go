@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/binary"
 	"os"
+	"strings"
 )
 
 func Find(searchKey string, indexFilePath string, dataFilePath string) (*DataEntry, error) {
@@ -192,4 +193,36 @@ func WriteWALRow(walFile *os.File, walEntry *WALEntry) {
 	binary.Write(walFile, binary.BigEndian, walEntry.tombstone)
 	binary.Write(walFile, binary.BigEndian, binKey)
 	binary.Write(walFile, binary.BigEndian, binValue)
+}
+
+func GetFilenamesByPredicate(dir *os.File, predicate func(string) bool) []string {
+	files := make([]string, 0)
+
+	for {
+		names, err := dir.Readdirnames(100)
+
+		if err != nil {
+			break
+		}
+
+		if len(names) == 0 {
+			break
+		}
+
+		for _, n := range names {
+			if predicate(n) {
+				files = append(files, n)
+			}
+		}
+	}
+
+	return files
+}
+
+func IsIndexFile(name string) bool {
+	return strings.HasPrefix(name, "index-") && strings.HasSuffix(name, ".bin")
+}
+
+func IsWALFile(name string) bool {
+	return strings.HasPrefix(name, "wal-") && strings.HasSuffix(name, ".bin")
 }

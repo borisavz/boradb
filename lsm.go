@@ -12,25 +12,7 @@ func FindLSM(key string) (string, error) {
 		return "", err
 	}
 
-	indexFiles := make([]string, 0)
-
-	for {
-		names, err := dir.Readdirnames(100)
-
-		if err != nil {
-			break
-		}
-
-		if len(names) == 0 {
-			break
-		}
-
-		for _, n := range names {
-			if strings.HasPrefix(n, "index-") {
-				indexFiles = append(indexFiles, n)
-			}
-		}
-	}
+	indexFiles := GetFilenamesByPredicate(dir, IsIndexFile)
 
 	dir.Close()
 
