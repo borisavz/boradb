@@ -32,7 +32,7 @@ func (e *Engine) PutValue(key string, value string) error {
 	e.memtable.Put(key, value)
 
 	if e.memtable.MemtableSize() == 3 {
-		e.memtable.TriggerBackgroundCompaction()
+		go e.memtable.TriggerBackgroundFlush()
 	}
 
 	return nil

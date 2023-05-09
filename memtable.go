@@ -10,15 +10,15 @@ type Memtable struct {
 	currentMemtable     *skiplist.SkipList
 	readOnlyMemtable    *skiplist.SkipList
 	currentMemtableLock sync.RWMutex
-	compactionLock      sync.Mutex
+	flushLock           sync.Mutex
 }
 
 func (m *Memtable) Get(key string) (string, error) {
-	m.compactionLock.Lock()
+	m.flushLock.Lock()
 	m.currentMemtableLock.RLock()
 
 	defer m.currentMemtableLock.RUnlock()
-	defer m.compactionLock.Unlock()
+	defer m.flushLock.Unlock()
 
 	val, ok := m.currentMemtable.GetValue(key)
 	if !ok {
@@ -46,26 +46,26 @@ func (m *Memtable) Get(key string) (string, error) {
 }
 
 func (m *Memtable) Put(key string, value string) {
-	m.compactionLock.Lock()
+	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
 	entry := MemtableEntry{value, false}
 
 	m.currentMemtable.Set(key, entry)
 
-	m.compactionLock.Unlock()
+	m.flushLock.Unlock()
 	m.currentMemtableLock.Unlock()
 }
 
 func (m *Memtable) Delete(key string) {
-	m.compactionLock.Lock()
+	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
 	deletedEntry := MemtableEntry{"", true}
 
 	m.currentMemtable.Set(key, deletedEntry)
 
-	m.compactionLock.Unlock()
+	m.flushLock.Unlock()
 	m.currentMemtableLock.Unlock()
 }
 
@@ -73,11 +73,11 @@ func (m *Memtable) MemtableSize() int {
 	return m.currentMemtable.Len()
 }
 
-func (m *Memtable) TriggerBackgroundCompaction() {
-	m.compactionLock.Lock()
+func (m *Memtable) TriggerBackgroundFlush() {
+	m.flushLock.Lock()
 
 	m.readOnlyMemtable = m.currentMemtable
 	m.currentMemtable = skiplist.New(skiplist.StringAsc)
 
-	m.compactionLock.Unlock()
+	m.flushLock.Unlock()
 }
