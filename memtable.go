@@ -55,14 +55,14 @@ func (m *Memtable) Get(key string) (string, error) {
 	return entry.value, nil
 }
 
-func (m *Memtable) Put(key string, value string) {
+func (m *Memtable) Put(key string, value string, timestamp int64) {
 	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
 	entry := MemtableEntry{
 		value:     value,
 		tombstone: false,
-		timestamp: uint64(time.Now().UnixNano()),
+		timestamp: uint64(timestamp),
 	}
 
 	m.currentMemtable.Set(key, entry)
@@ -71,14 +71,14 @@ func (m *Memtable) Put(key string, value string) {
 	m.currentMemtableLock.Unlock()
 }
 
-func (m *Memtable) Delete(key string) {
+func (m *Memtable) Delete(key string, timestamp int64) {
 	m.flushLock.Lock()
 	m.currentMemtableLock.Lock()
 
 	deletedEntry := MemtableEntry{
 		value:     "",
 		tombstone: true,
-		timestamp: uint64(time.Now().UnixNano()),
+		timestamp: uint64(timestamp),
 	}
 
 	m.currentMemtable.Set(key, deletedEntry)

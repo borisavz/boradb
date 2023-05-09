@@ -122,3 +122,15 @@ func WriteDataRow(dataFile *os.File, dataEntry *DataEntry) {
 	binary.Write(dataFile, binary.BigEndian, binKey)
 	binary.Write(dataFile, binary.BigEndian, binValue)
 }
+
+func WriteWALRow(walFile *os.File, walEntry *WALEntry) {
+	binKey := []byte(walEntry.key)
+	binValue := []byte(walEntry.value)
+
+	binary.Write(walFile, binary.BigEndian, walEntry.keySize)
+	binary.Write(walFile, binary.BigEndian, walEntry.valueSize)
+	binary.Write(walFile, binary.BigEndian, walEntry.timestamp)
+	binary.Write(walFile, binary.BigEndian, walEntry.tombstone)
+	binary.Write(walFile, binary.BigEndian, binKey)
+	binary.Write(walFile, binary.BigEndian, binValue)
+}

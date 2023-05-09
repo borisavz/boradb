@@ -2,10 +2,12 @@ package main
 
 import (
 	"github.com/huandu/skiplist"
+	"time"
 )
 
 type Engine struct {
 	memtable *Memtable
+	wal      *WriteAheadLog
 }
 
 func InitializeEngine() *Engine {
@@ -14,8 +16,11 @@ func InitializeEngine() *Engine {
 		readOnlyMemtable: skiplist.New(skiplist.StringAsc),
 	}
 
+	w := WriteAheadLog{}
+
 	return &Engine{
 		memtable: &m,
+		wal:      &w,
 	}
 }
 
@@ -30,7 +35,10 @@ func (e *Engine) GetValue(key string) (string, error) {
 }
 
 func (e *Engine) PutValue(key string, value string) error {
-	e.memtable.Put(key, value)
+	timestamp := time.Now().UnixNano()
+
+	e.memtable.Put(key, value, timestamp)
+	e.wal.Append(key, value, timestamp, false)
 
 	if e.memtable.MemtableSize() == 3 {
 		go e.memtable.TriggerBackgroundFlush()
@@ -40,7 +48,10 @@ func (e *Engine) PutValue(key string, value string) error {
 }
 
 func (e *Engine) DeleteValue(key string) error {
-	e.memtable.Delete(key)
+	timestamp := time.Now().UnixNano()
+
+	e.memtable.Delete(key, timestamp)
+	e.wal.Append(key, "", timestamp, true)
 
 	return nil
 }
