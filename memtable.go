@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/gob"
 	"errors"
 	"fmt"
+	"github.com/bits-and-blooms/bloom/v3"
 	"github.com/huandu/skiplist"
 	"os"
 	"sync"
@@ -103,6 +105,7 @@ func (m *Memtable) TriggerBackgroundFlush() {
 }
 
 func FlushToFile(shardId int, timestamp int64, s *skiplist.SkipList) {
+	filterFilePath := fmt.Sprintf("shard-%d/filter-%d.bin", shardId, timestamp)
 	indexFilePath := fmt.Sprintf("shard-%d/index-%d.bin", shardId, timestamp)
 	dataFilePath := fmt.Sprintf("shard-%d/data-%d.bin", shardId, timestamp)
 	walFilePath := fmt.Sprintf("shard-%d/wal-%d.bin", shardId, timestamp)
@@ -125,9 +128,13 @@ func FlushToFile(shardId int, timestamp int64, s *skiplist.SkipList) {
 	dataOffset := 0
 	indexOffset := 0
 
+	filter := bloom.NewWithEstimates(1000, 0.01)
+
 	for el != nil {
 		strKey := el.Key().(string)
 		val := el.Value.(MemtableEntry)
+
+		filter.Add([]byte(strKey))
 
 		binKey := []byte(strKey)
 		binKeySize := binary.Size(binKey)
@@ -161,6 +168,14 @@ func FlushToFile(shardId int, timestamp int64, s *skiplist.SkipList) {
 
 	indexFile.Close()
 	dataFile.Close()
+
+	filterFile, err := os.Create(filterFilePath)
+	encoder := gob.NewEncoder(filterFile)
+
+	err = encoder.Encode(filter)
+	if err != nil {
+		fmt.Println(err)
+	}
 
 	os.Rename(indexFilePathTemp, indexFilePath)
 	os.Rename(dataFilePathTemp, dataFilePath)
