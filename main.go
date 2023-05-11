@@ -1,7 +1,7 @@
 package main
 
 func main() {
-	//Recover()
+	Recover()
 	InitializeEngine()
 	InitializeHTTP()
 }

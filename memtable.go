@@ -180,5 +180,6 @@ func FlushToFile(shardId int, timestamp int64, s *skiplist.SkipList) {
 	os.Rename(indexFilePathTemp, indexFilePath)
 	os.Rename(dataFilePathTemp, dataFilePath)
 
+	println(walFilePath)
 	os.Remove(walFilePath)
 }

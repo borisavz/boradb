@@ -3,8 +3,12 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
+	"github.com/huandu/skiplist"
 	"os"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 type WriteAheadLog struct {
@@ -51,51 +55,70 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 	walFile.Close()
 }
 
-//func Recover() {
-//	timestamp := time.Now().UnixNano()
-//	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
-//
-//	os.Rename("wal-current.bin", walFilePath)
-//
-//	dir, err := os.Open("./")
-//	if err != nil {
-//		//TODO: handle error
-//		return
-//	}
-//
-//	walFiles := GetFilenamesByPredicate(dir, IsWALFile)
-//
-//	dir.Close()
-//
-//	for _, f := range walFiles {
-//		timestampString := strings.ReplaceAll(strings.ReplaceAll(f, "wal-", ""), ".bin", "")
-//		walTimestamp, err := strconv.Atoi(timestampString)
-//
-//		walCurrent, err := os.Open(f)
-//		if err != nil {
-//			return
-//		}
-//
-//		memtable := skiplist.New(skiplist.StringAsc)
-//
-//		for {
-//			walEntry := ReadWALRow(walCurrent)
-//
-//			if walEntry != nil {
-//				m := MemtableEntry{
-//					value:     walEntry.value,
-//					tombstone: walEntry.tombstone,
-//					timestamp: walEntry.timestamp,
-//				}
-//
-//				memtable.Set(walEntry.key, m)
-//			} else {
-//				break
-//			}
-//		}
-//
-//		walCurrent.Close()
-//
-//		FlushToFile(int64(walTimestamp), memtable)
-//	}
-//}
+func Recover() {
+	dir, err := os.Open("./")
+	if err != nil {
+		//TODO: handle error
+		return
+	}
+
+	shardFolders := GetFilenamesByPredicate(dir, IsShardFolder)
+
+	dir.Close()
+
+	for _, s := range shardFolders {
+		RecoverShard(s)
+	}
+}
+
+func RecoverShard(shardPath string) {
+	timestamp := time.Now().UnixNano()
+	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
+
+	os.Rename(shardPath+"/wal-current.bin", shardPath+"/"+walFilePath)
+
+	dir, err := os.Open(shardPath)
+	if err != nil {
+		//TODO: handle error
+		return
+	}
+
+	walFiles := GetFilenamesByPredicate(dir, IsWALFile)
+
+	dir.Close()
+
+	for _, f := range walFiles {
+		shardIdString := strings.ReplaceAll(shardPath, "shard-", "")
+		shardId, err := strconv.Atoi(shardIdString)
+
+		timestampString := strings.ReplaceAll(strings.ReplaceAll(f, "wal-", ""), ".bin", "")
+		walTimestamp, err := strconv.Atoi(timestampString)
+
+		walCurrent, err := os.Open(shardPath + "/" + f)
+		if err != nil {
+			return
+		}
+
+		memtable := skiplist.New(skiplist.StringAsc)
+
+		for {
+			walEntry := ReadWALRow(walCurrent)
+
+			if walEntry != nil {
+				m := MemtableEntry{
+					value:     walEntry.value,
+					tombstone: walEntry.tombstone,
+					timestamp: walEntry.timestamp,
+				}
+
+				memtable.Set(walEntry.key, m)
+			} else {
+				break
+			}
+		}
+
+		walCurrent.Close()
+
+		FlushToFile(shardId, int64(walTimestamp), memtable)
+	}
+}

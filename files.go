@@ -219,6 +219,10 @@ func GetFilenamesByPredicate(dir *os.File, predicate func(string) bool) []string
 	return files
 }
 
+func IsShardFolder(name string) bool {
+	return strings.HasPrefix(name, "shard-")
+}
+
 func IsIndexFile(name string) bool {
 	return strings.HasPrefix(name, "index-") && strings.HasSuffix(name, ".bin")
 }
