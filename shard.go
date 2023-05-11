@@ -54,7 +54,7 @@ func (s *Shard) PutValue(key string, value string) error {
 	s.memtable.Put(key, value, timestamp)
 	s.wal.Append(key, value, timestamp, false)
 
-	if s.memtable.MemtableSize() == 3 {
+	if s.memtable.MemtableSize() == 1000 {
 		//TODO: check if sync working properly
 		walName := fmt.Sprintf("wal-%d.bin", timestamp)
 
