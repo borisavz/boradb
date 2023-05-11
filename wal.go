@@ -47,6 +47,8 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 	}
 
 	WriteWALRow(walFile, &walEntry)
+
+	walFile.Close()
 }
 
 //func Recover() {

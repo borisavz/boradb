@@ -24,7 +24,7 @@ func FindLSM(shardId int, key string) (string, error) {
 	for _, indexFilePath := range indexFiles {
 		dataFilePath := strings.Replace(indexFilePath, "index-", "data-", 1)
 
-		dataEntry, err := Find(key, indexFilePath, dataFilePath)
+		dataEntry, err := Find(key, shardPath+"/"+indexFilePath, shardPath+"/"+dataFilePath)
 		if err != nil {
 
 		}
