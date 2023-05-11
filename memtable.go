@@ -17,18 +17,16 @@ type MemtableEntry struct {
 }
 
 type Memtable struct {
-	currentMemtable     *skiplist.SkipList
-	readOnlyMemtable    *skiplist.SkipList
-	currentMemtableLock sync.RWMutex
-	flushLock           sync.Mutex
+	shardId            int
+	currentMemtable    *skiplist.SkipList
+	readOnlyMemtable   *skiplist.SkipList
+	memtableSwitchLock sync.Mutex
+	flushLock          sync.Mutex
 }
 
 func (m *Memtable) Get(key string) (string, error) {
-	m.flushLock.Lock()
-	m.currentMemtableLock.RLock()
-
-	defer m.currentMemtableLock.RUnlock()
-	defer m.flushLock.Unlock()
+	m.memtableSwitchLock.Lock()
+	defer m.memtableSwitchLock.Unlock()
 
 	val, ok := m.currentMemtable.GetValue(key)
 	if !ok {
@@ -56,8 +54,8 @@ func (m *Memtable) Get(key string) (string, error) {
 }
 
 func (m *Memtable) Put(key string, value string, timestamp int64) {
-	m.flushLock.Lock()
-	m.currentMemtableLock.Lock()
+	m.memtableSwitchLock.Lock()
+	defer m.memtableSwitchLock.Unlock()
 
 	entry := MemtableEntry{
 		value:     value,
@@ -66,14 +64,11 @@ func (m *Memtable) Put(key string, value string, timestamp int64) {
 	}
 
 	m.currentMemtable.Set(key, entry)
-
-	m.flushLock.Unlock()
-	m.currentMemtableLock.Unlock()
 }
 
 func (m *Memtable) Delete(key string, timestamp int64) {
-	m.flushLock.Lock()
-	m.currentMemtableLock.Lock()
+	m.memtableSwitchLock.Lock()
+	defer m.memtableSwitchLock.Unlock()
 
 	deletedEntry := MemtableEntry{
 		value:     "",
@@ -82,12 +77,12 @@ func (m *Memtable) Delete(key string, timestamp int64) {
 	}
 
 	m.currentMemtable.Set(key, deletedEntry)
-
-	m.flushLock.Unlock()
-	m.currentMemtableLock.Unlock()
 }
 
 func (m *Memtable) MemtableSize() int {
+	m.memtableSwitchLock.Lock()
+	defer m.memtableSwitchLock.Unlock()
+
 	return m.currentMemtable.Len()
 }
 
@@ -95,18 +90,22 @@ func (m *Memtable) TriggerBackgroundFlush() {
 	m.flushLock.Lock()
 	defer m.flushLock.Unlock()
 
+	m.memtableSwitchLock.Lock()
+
 	m.readOnlyMemtable = m.currentMemtable
 	m.currentMemtable = skiplist.New(skiplist.StringAsc)
 
 	timestamp := time.Now().UnixNano()
 
-	FlushToFile(timestamp, m.readOnlyMemtable)
+	m.memtableSwitchLock.Unlock()
+
+	FlushToFile(m.shardId, timestamp, m.readOnlyMemtable)
 }
 
-func FlushToFile(timestamp int64, s *skiplist.SkipList) {
-	indexFilePath := fmt.Sprintf("index-%d.bin", timestamp)
-	dataFilePath := fmt.Sprintf("data-%d.bin", timestamp)
-	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
+func FlushToFile(shardId int, timestamp int64, s *skiplist.SkipList) {
+	indexFilePath := fmt.Sprintf("shard-%d/index-%d.bin", shardId, timestamp)
+	dataFilePath := fmt.Sprintf("shard-%d/data-%d.bin", shardId, timestamp)
+	walFilePath := fmt.Sprintf("shard-%d/wal-%d.bin", shardId, timestamp)
 
 	indexFilePathTemp := fmt.Sprintf("%s.temp", indexFilePath)
 	dataFilePathTemp := fmt.Sprintf("%s.temp", dataFilePath)

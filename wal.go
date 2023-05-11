@@ -3,15 +3,12 @@ package main
 import (
 	"encoding/binary"
 	"fmt"
-	"github.com/huandu/skiplist"
 	"os"
-	"strconv"
-	"strings"
 	"sync"
-	"time"
 )
 
 type WriteAheadLog struct {
+	shardId   int
 	writeLock sync.Mutex
 }
 
@@ -41,8 +38,10 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 		value:     value,
 	}
 
+	walPath := fmt.Sprintf("./shard-%d/wal-current.bin", w.shardId)
+
 	//TODO: write using O_DIRECT to skip fs cache
-	walFile, err := os.OpenFile("wal-current.bin", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	walFile, err := os.OpenFile(walPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		//TODO: handle error
 	}
@@ -50,51 +49,51 @@ func (w *WriteAheadLog) Append(key string, value string, timestamp int64, tombst
 	WriteWALRow(walFile, &walEntry)
 }
 
-func Recover() {
-	timestamp := time.Now().UnixNano()
-	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
-
-	os.Rename("wal-current.bin", walFilePath)
-
-	dir, err := os.Open("./")
-	if err != nil {
-		//TODO: handle error
-		return
-	}
-
-	walFiles := GetFilenamesByPredicate(dir, IsWALFile)
-
-	dir.Close()
-
-	for _, f := range walFiles {
-		timestampString := strings.ReplaceAll(strings.ReplaceAll(f, "wal-", ""), ".bin", "")
-		walTimestamp, err := strconv.Atoi(timestampString)
-
-		walCurrent, err := os.Open(f)
-		if err != nil {
-			return
-		}
-
-		memtable := skiplist.New(skiplist.StringAsc)
-
-		for {
-			walEntry := ReadWALRow(walCurrent)
-
-			if walEntry != nil {
-				m := MemtableEntry{
-					value:     walEntry.value,
-					tombstone: walEntry.tombstone,
-					timestamp: walEntry.timestamp,
-				}
-
-				memtable.Set(walEntry.key, m)
-			} else {
-				break
-			}
-		}
-
-		walCurrent.Close()
-
-		FlushToFile(int64(walTimestamp), memtable)
-	}
-}
+//func Recover() {
+//	timestamp := time.Now().UnixNano()
+//	walFilePath := fmt.Sprintf("wal-%d.bin", timestamp)
+//
+//	os.Rename("wal-current.bin", walFilePath)
+//
+//	dir, err := os.Open("./")
+//	if err != nil {
+//		//TODO: handle error
+//		return
+//	}
+//
+//	walFiles := GetFilenamesByPredicate(dir, IsWALFile)
+//
+//	dir.Close()
+//
+//	for _, f := range walFiles {
+//		timestampString := strings.ReplaceAll(strings.ReplaceAll(f, "wal-", ""), ".bin", "")
+//		walTimestamp, err := strconv.Atoi(timestampString)
+//
+//		walCurrent, err := os.Open(f)
+//		if err != nil {
+//			return
+//		}
+//
+//		memtable := skiplist.New(skiplist.StringAsc)
+//
+//		for {
+//			walEntry := ReadWALRow(walCurrent)
+//
+//			if walEntry != nil {
+//				m := MemtableEntry{
+//					value:     walEntry.value,
+//					tombstone: walEntry.tombstone,
+//					timestamp: walEntry.timestamp,
+//				}
+//
+//				memtable.Set(walEntry.key, m)
+//			} else {
+//				break
+//			}
+//		}
+//
+//		walCurrent.Close()
+//
+//		FlushToFile(int64(walTimestamp), memtable)
+//	}
+//}

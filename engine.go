@@ -2,63 +2,60 @@ package main
 
 import (
 	"fmt"
-	"github.com/huandu/skiplist"
-	"time"
+	"hash/fnv"
+	"os"
+	"runtime"
 )
 
 var engine *Engine
+var cores int
 
 type Engine struct {
-	memtable *Memtable
-	wal      *WriteAheadLog
+	shards []Shard
 }
 
 func InitializeEngine() {
-	m := Memtable{
-		currentMemtable:  skiplist.New(skiplist.StringAsc),
-		readOnlyMemtable: skiplist.New(skiplist.StringAsc),
+	cores = runtime.NumCPU()
+
+	shards := make([]Shard, cores)
+
+	for i := 0; i < cores; i++ {
+		shards[i] = NewShard(i)
+
+		shardFolderPath := fmt.Sprintf("shard-%d", i)
+
+		//TODO: proper perm
+		os.Mkdir(shardFolderPath, os.ModePerm)
 	}
 
-	w := WriteAheadLog{}
-
 	engine = &Engine{
-		memtable: &m,
-		wal:      &w,
+		shards: shards,
 	}
 }
 
 func (e *Engine) GetValue(key string) (string, error) {
-	val, err := e.memtable.Get(key)
+	h := fnv.New32a()
+	h.Write([]byte(key))
 
-	if err != nil {
-		return FindLSM(key)
-	}
+	shardId := int(h.Sum32()) % cores
 
-	return val, nil
+	return e.shards[shardId].GetValue(key)
 }
 
 func (e *Engine) PutValue(key string, value string) error {
-	timestamp := time.Now().UnixNano()
+	h := fnv.New32a()
+	h.Write([]byte(key))
 
-	e.memtable.Put(key, value, timestamp)
-	e.wal.Append(key, value, timestamp, false)
+	shardId := int(h.Sum32()) % cores
 
-	if e.memtable.MemtableSize() == 3 {
-		//TODO: put proper sync
-		walName := fmt.Sprintf("wal-%d.bin", timestamp)
-
-		e.wal.RenameCurrentWAL(walName)
-		go e.memtable.TriggerBackgroundFlush()
-	}
-
-	return nil
+	return e.shards[shardId].PutValue(key, value)
 }
 
 func (e *Engine) DeleteValue(key string) error {
-	timestamp := time.Now().UnixNano()
+	h := fnv.New32a()
+	h.Write([]byte(key))
 
-	e.memtable.Delete(key, timestamp)
-	e.wal.Append(key, "", timestamp, true)
+	shardId := int(h.Sum32()) % cores
 
-	return nil
+	return e.shards[shardId].DeleteValue(key)
 }

@@ -1,13 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"sort"
 	"strings"
 )
 
-func FindLSM(key string) (string, error) {
-	dir, err := os.Open("./")
+func FindLSM(shardId int, key string) (string, error) {
+	shardPath := fmt.Sprintf("./shard-%d", shardId)
+
+	dir, err := os.Open(shardPath)
 	if err != nil {
 		return "", err
 	}
